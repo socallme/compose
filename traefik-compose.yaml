@@ -1,0 +1,64 @@
+version: '3'
+
+services:
+  traefik:
+    container_name: traefik
+    image: traefik:latest
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Dashboard port
+    volumes:
+      - /opt/appdata/traefik/:/etc/traefik/
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      # Dashboard configuration
+      - "traefik.http.routers.traefik.rule=Host(`traefik.*.com`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth@file,secHeaders@file"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=cloudflare"
+      - "traefik.http.routers.traefik.tls.domains[0].main=*.com"
+      - "traefik.http.routers.traefik.tls.domains[0].sans=*.com"
+      # HTTP to HTTPS redirect
+      - "traefik.http.routers.traefik-http.rule=Host(`traefik..com`)"
+      - "traefik.http.routers.traefik-http.entrypoints=web"
+      - "traefik.http.routers.traefik-http.middlewares=redirect-to-https@file"
+      # Global redirect to HTTPS
+      - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=redirect-to-https@file"
+      - "traefik.http.routers.http-catchall.priority=1"
+    environment:
+      - CF_DNS_API_TOKEN=jyfCWW0jAGpdGECUPkSzvAmOeteAmBrWK_4fxOBz
+    restart: unless-stopped
+    depends_on:
+      - dockersocket
+
+  dockersocket:
+    container_name: dockersocket
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy
+    environment:
+      - CONTAINERS=1
+      - POST=0
+      - SERVICES=1
+      - NETWORKS=1
+      - SWARM=0
+      - TASKS=0
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
